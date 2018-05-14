@@ -14,13 +14,13 @@ Common uses:
 
 ### GNU/Linux
 
-1. Install the Wireshark development libraries: sudo apt-get install libwireshark-dev
+1. Install the Wireshark development libraries: sudo apt-get install wireshark-dev
 2. Compile the dlms.so plugin: sh build.sh
 3. Copy the dlms.so plugin to the Wireshark plugins directory: sudo cp dlms.so /usr/lib/x86_64-linux-gnu/wireshark/plugins/2.4.5/dlms.so
 
 ### Windows
 
-Copy the pre-compiled dlms.dll plugin file to your Wireshark plugins directory (usually C:\Program Files\Wireshark\plugins\2.4.5\dlms.dll).
+Copy the pre-compiled dlms.dll plugin file to your Wireshark plugins directory (usually C:\Program Files\Wireshark\plugins\2.6\epan\dlms.dll).
 
 To compile the dlms.dll plugin yourself:
 1. Compile the Wireshark source code for Windows, as described in https://www.wireshark.org/docs/wsdg_html_chunked/ChSetupWin32.html

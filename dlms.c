@@ -1649,10 +1649,27 @@ dlms_register_protoinfo(void)
  * The symbols that a Wireshark plugin is required to export.
  */
 
-WS_DLL_PUBLIC_DEF const gchar version[] = "0.0.1";
+#define DLMS_PLUGIN_VERSION "0.0.2"
 
+#ifdef VERSION_RELEASE /* wireshark >= 2.6 */
+
+WS_DLL_PUBLIC_DEF const gchar plugin_release[] = VERSION_RELEASE;
+WS_DLL_PUBLIC_DEF const gchar plugin_version[] = DLMS_PLUGIN_VERSION;
+WS_DLL_PUBLIC_DEF void
+plugin_register(void)
+{
+    static proto_plugin p;
+    p.register_protoinfo = dlms_register_protoinfo;
+    proto_register_plugin(&p);
+}
+
+#else /* wireshark < 2.6 */
+
+WS_DLL_PUBLIC_DEF const gchar version[] = DLMS_PLUGIN_VERSION;
 WS_DLL_PUBLIC_DEF void
 plugin_register(void)
 {
     dlms_register_protoinfo();
 }
+
+#endif

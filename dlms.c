@@ -267,15 +267,15 @@ static const value_string dlms_hdlc_frame_names[] = {
 /* Structure with the names of a DLMS/COSEM class */
 struct dlms_cosem_class {
     const char *name;
-    const char *attributes[10]; /* index 0 is attribute 2 (attribute 1 is always "logical_name") */
-    const char *methods[6]; /* index 0 is method 1 */
+    const char *attributes[18]; /* index 0 is attribute 2 (attribute 1 is always "logical_name") */
+    const char *methods[11]; /* index 0 is method 1 */
 };
 typedef struct dlms_cosem_class dlms_cosem_class;
 
 /* Get the DLMS/COSEM class with the specified class_id */
 static const dlms_cosem_class *
 dlms_get_class(int class_id) {
-    const char ids[] = {
+    const short ids[] = {
         1, /* data */
         3, /* register */
         4, /* extended register */
@@ -283,14 +283,24 @@ dlms_get_class(int class_id) {
         7, /* profile generic */
         8, /* clock */
         9, /* script table */
+        10, /* schedule */
         11, /* special days table */
         15, /* association ln */
         17, /* sap assignment */
         18, /* image transfer */
         20, /* activity calendar */
+        21, /* register monitor */
         22, /* single action schedule */
         23, /* iec hdlc setup */
+        30, /* data protection */
         70, /* disconnect control */
+        71, /* limiter */
+        104, /* zigbee network control */
+        111, /* account */
+        112, /* credit */
+        113, /* charge */
+        115, /* token gateway */
+        9000, /* extended data */
     };
     static const struct dlms_cosem_class classes[] = {
         {
@@ -374,6 +384,15 @@ dlms_get_class(int class_id) {
                 "execute"
             }
         },{
+            "schedule",
+            {
+                "entries"
+            },{
+                "enable_disable",
+                "insert",
+                "delete"
+            }
+        },{
             "special_days_table",
             {
                 "entries"
@@ -440,6 +459,13 @@ dlms_get_class(int class_id) {
                 "active_passive_calendar"
             }
         },{
+            "register_monitor",
+            {
+                "thresholds",
+                "monitored_value",
+                "actions"
+            }
+        },{
             "single_action_schedule",
             {
                 "executed_script",
@@ -459,6 +485,19 @@ dlms_get_class(int class_id) {
                 "device_address"
             }
         },{
+            "data_protection",
+            {
+                "protection_buffer",
+                "protection_object_list",
+                "protection_parameters_get",
+                "protection_parameters_set",
+                "required_protection"
+            },{
+                "get_protected_attributes",
+                "set_protected_attributes",
+                "invoke_protected_method"
+            }
+        },{
             "disconnect_control",
             {
                 "output_state",
@@ -467,6 +506,128 @@ dlms_get_class(int class_id) {
             },{
                 "remote_disconnect",
                 "remote_reconnect"
+            }
+        },{
+            "limiter",
+            {
+                "monitored_value",
+                "threshold_active",
+                "threshold_normal",
+                "threshold_emergency",
+                "min_over_threshold_duration",
+                "min_under_threshold_duration",
+                "emergency_profile",
+                "emergency_profile_group_id_list",
+                "emergency_profile_active",
+                "actions"
+            }
+        },{
+            "zigbee_network_control",
+            {
+                "enable_disable_joining",
+                "join_timeout",
+                "active_devices"
+            },{
+                "register_device",
+                "unregister_device",
+                "unregister_all_devices",
+                "backup_pan",
+                "restore_pan",
+                "identify_device",
+                "remove_mirror",
+                "update_network_key",
+                "update_link_key",
+                "create_pan",
+                "remove_pan"
+            }
+        },{
+            "account",
+            {
+                "account_mode_and_status",
+                "current_credit_in_use",
+                "current_credit_status",
+                "available_credit",
+                "amount_to_clear",
+                "clearance_threshold",
+                "aggregated_debt",
+                "credit_reference_list",
+                "charge_reference_list",
+                "credit_charge_configuration",
+                "token_gateway_configuration",
+                "account_activation_time",
+                "account_closure_time",
+                "currency",
+                "low_credit_threshold",
+                "next_credit_available_threshold",
+                "max_provision",
+                "max_provision_period"
+            },{
+                "activate_account",
+                "close_account",
+                "reset_account"
+            }
+        },{
+            "credit",
+            {
+                "current_credit_amount",
+                "credit_type",
+                "priority",
+                "warning_threshold",
+                "limit",
+                "credit_configuration",
+                "credit_status",
+                "preset_credit_amount",
+                "credit_available_threshold",
+                "period"
+            },{
+                "update_amount",
+                "set_amount_to_value",
+                "invoke_credit"
+            }
+        },{
+            "charge",
+            {
+                "total_amount_paid",
+                "charge_type",
+                "priority",
+                "unit_charge_active",
+                "unit_charge_passive",
+                "unit_charge_activation_time",
+                "period",
+                "charge_configuration",
+                "last_collection_time",
+                "last_collection_amount",
+                "total_amount_remaining",
+                "proportion"
+            },{
+                "update_unit_charge",
+                "activate_passive_unit_charge",
+                "collect",
+                "update_total_amount_remaining",
+                "set_total_amount_remaining"
+            }
+        },{
+            "token_gateway",
+            {
+                "token",
+                "token_time",
+                "token_description",
+                "token_delivery_method",
+                "token_status"
+            },{
+                "enter"
+            }
+        },{
+            "extended_data",
+            {
+                "value_active",
+                "scaler_unit_active",
+                "value_passive",
+                "scaler_unit_passive",
+                "activate_passive_value_time"
+            },{
+                "reset",
+                "activate_passive_value"
             }
         }
     };

@@ -41,6 +41,8 @@
 #define DLMS_SET_RESPONSE 197
 #define DLMS_ACTION_RESPONSE 199
 #define DLMS_EXCEPTION_RESPONSE 216
+#define DLMS_ACCESS_REQUEST 217
+#define DLMS_ACCESS_RESPONSE 218
 static const value_string dlms_apdu_names[] = {
     { DLMS_AARQ, "aarq" },
     { DLMS_AARE, "aare" },
@@ -54,6 +56,8 @@ static const value_string dlms_apdu_names[] = {
     { DLMS_SET_RESPONSE, "set-response" },
     { DLMS_ACTION_RESPONSE, "action-response" },
     { DLMS_EXCEPTION_RESPONSE, "exception-response" },
+    { DLMS_ACCESS_REQUEST, "access-request" },
+    { DLMS_ACCESS_RESPONSE, "access-response" },
     { 0, 0 }
 };
 
@@ -139,6 +143,29 @@ static const value_string dlms_action_response_names[] = {
     { 0, 0 },
 };
 
+/* Choice values for an Access-Request-Specification */
+#define DLMS_ACCESS_REQUEST_GET 1
+#define DLMS_ACCESS_REQUEST_SET 2
+#define DLMS_ACCESS_REQUEST_ACTION 3
+#define DLMS_ACCESS_REQUEST_GET_WITH_SELECTION 4
+#define DLMS_ACCESS_REQUEST_SET_WITH_SELECTION 5
+static const value_string dlms_access_request_names[] = {
+    { DLMS_ACCESS_REQUEST_GET, "access-request-get" },
+    { DLMS_ACCESS_REQUEST_SET, "access-request-set" },
+    { DLMS_ACCESS_REQUEST_ACTION, "access-request-action" },
+    { DLMS_ACCESS_REQUEST_GET_WITH_SELECTION, "access-request-get-with-selection" },
+    { DLMS_ACCESS_REQUEST_SET_WITH_SELECTION, "access-request-set-with-selection" },
+    { 0, 0 },
+};
+
+/* Choice values for an Access-Response-Specification */
+static const value_string dlms_access_response_names[] = {
+    { 1, "access-response-get" },
+    { 2, "access-response-set" },
+    { 3, "access-response-action" },
+    { 0, 0 },
+};
+
 /* Enumerated values for a Data-Access-Result */
 static const value_string dlms_data_access_result_names[] = {
     { 0, "success" },
@@ -204,6 +231,20 @@ static const value_string dlms_service_class_names[] = {
 static const value_string dlms_priority_names[] = {
     { 0, "normal" },
     { 1, "high" },
+    { 0, 0 }
+};
+
+/* Names of the values of the self-descriptive bit in the Long-Invoke-Id-And-Priority */
+static const value_string dlms_self_descriptive_names[] = {
+    { 0, "not-self-descriptive" },
+    { 1, "self-descriptive" },
+    { 0, 0 }
+};
+
+/* Names of the values of the processing-option bit in the Long-Invoke-Id-And-Priority */
+static const value_string dlms_processing_option_names[] = {
+    { 0, "continue-on-error" },
+    { 1, "break-on-error" },
     { 0, 0 }
 };
 
@@ -491,24 +532,33 @@ static struct {
     header_field_info get_response;
     header_field_info set_response;
     header_field_info action_response;
-    header_field_info invoke_id_and_priority;
+    header_field_info access_request;
+    header_field_info access_response;
     header_field_info class_id;
     header_field_info instance_id;
     header_field_info attribute_id;
     header_field_info method_id;
-    header_field_info selective_access_descriptor;
+    header_field_info access_selector;
     header_field_info data_access_result;
     header_field_info action_result;
     header_field_info block_number;
     header_field_info last_block;
     header_field_info type_description;
     header_field_info data;
+    header_field_info date_time;
     header_field_info length;
     header_field_info state_error;
     header_field_info service_error;
+    /* Invoke-Id-And-Priority */
     header_field_info invoke_id;
     header_field_info service_class;
     header_field_info priority;
+    /* Long-Invoke-Id-And-Priority */
+    header_field_info long_invoke_id;
+    header_field_info long_self_descriptive;
+    header_field_info long_processing_option;
+    header_field_info long_service_class;
+    header_field_info long_priority;
     /* Conformance bits */
     header_field_info conformance_general_protection;
     header_field_info conformance_general_block_transfer;
@@ -574,24 +624,33 @@ static struct {
     { "Get Response", "dlms.get_response", FT_UINT8, BASE_DEC, dlms_get_response_names, 0, 0, HFILL },
     { "Set Response", "dlms.set_response", FT_UINT8, BASE_DEC, dlms_set_response_names, 0, 0, HFILL },
     { "Action Response", "dlms.action_response", FT_UINT8, BASE_DEC, dlms_action_response_names, 0, 0, HFILL },
-    { "Invoke Id And Priority", "dlms.invoke_id_and_priority", FT_NONE, BASE_NONE, 0, 0, 0, HFILL },
+    { "Access Request", "dlms.action_request", FT_UINT8, BASE_DEC, dlms_access_request_names, 0, 0, HFILL },
+    { "Access Response", "dlms.action_response", FT_UINT8, BASE_DEC, dlms_access_response_names, 0, 0, HFILL },
     { "Class Id", "dlms.class_id", FT_NONE, BASE_NONE, 0, 0, 0, HFILL },
     { "Instance Id", "dlms.instance_id", FT_NONE, BASE_NONE, 0, 0, 0, HFILL },
     { "Attribute Id", "dlms.attribute_id", FT_NONE, BASE_NONE, 0, 0, 0, HFILL },
     { "Method Id", "dlms.method_id", FT_UINT8, BASE_DEC, 0, 0, 0, HFILL },
-    { "Selective Access Descriptor", "dlms.selective_access_descriptor", FT_NONE, BASE_NONE, 0, 0, 0, HFILL },
+    { "Access Selector", "dlms.access_selector", FT_UINT8, BASE_DEC, 0, 0, 0, HFILL },
     { "Data Access Result", "dlms.data_access_result", FT_UINT8, BASE_DEC, dlms_data_access_result_names, 0, 0, HFILL },
     { "Action Result", "dlms.action_result", FT_UINT8, BASE_DEC, dlms_action_result_names, 0, 0, HFILL },
     { "Block Number", "dlms.block_number", FT_UINT32, BASE_DEC, 0, 0, 0, HFILL },
     { "Last Block", "dlms.last_block", FT_BOOLEAN, BASE_DEC, 0, 0, 0, HFILL },
     { "Type Description", "dlms.type_description", FT_NONE, BASE_NONE, 0, 0, 0, HFILL },
     { "Data", "dlms.data", FT_NONE, BASE_NONE, 0, 0, 0, HFILL },
+    { "Date-Time", "dlms.date_time", FT_NONE, BASE_NONE, 0, 0, 0, HFILL },
     { "Length", "dlms.length", FT_NONE, BASE_NONE, 0, 0, 0, HFILL },
     { "State Error", "dlms.state_error", FT_UINT8, BASE_DEC, dlms_state_error_names, 0, 0, HFILL },
     { "Service Error", "dlms.service_error", FT_UINT8, BASE_DEC, dlms_service_error_names, 0, 0, HFILL },
+    /* Invoke-Id-And-Priority */
     { "Invoke Id", "dlms.invoke_id", FT_UINT8, BASE_DEC, 0, 0x0f, 0, HFILL },
     { "Service Class", "dlms.service_class", FT_UINT8, BASE_DEC, dlms_service_class_names, 0x40, 0, HFILL },
     { "Priority", "dlms.priority", FT_UINT8, BASE_DEC, dlms_priority_names, 0x80, 0, HFILL },
+    /* Long-Invoke-Id-And-Priority */
+    { "Long Invoke Id", "dlms.long_invoke_id", FT_UINT32, BASE_DEC, 0, 0xffffff, 0, HFILL },
+    { "Self Descriptive", "dlms.self_descriptive", FT_UINT32, BASE_DEC, dlms_self_descriptive_names, 0x1000000, 0, HFILL },
+    { "Processing Option", "dlms.processing_option", FT_UINT32, BASE_DEC, dlms_processing_option_names, 0x2000000, 0, HFILL },
+    { "Service Class", "dlms.service_class", FT_UINT32, BASE_DEC, dlms_service_class_names, 0x4000000, 0, HFILL },
+    { "Priority", "dlms.priority", FT_UINT32, BASE_DEC, dlms_priority_names, 0x8000000, 0, HFILL },
     /* proposed-conformance and negotiated-conformance bits */
     { "general-protection", "dlms.conformance.general_protection", FT_UINT24, BASE_DEC, 0, 0x400000, 0, HFILL },
     { "general-block-transfer", "dlms.conformance.general_block_transfer", FT_UINT24, BASE_DEC, 0, 0x200000, 0, HFILL },
@@ -637,7 +696,12 @@ static struct {
     gint hdlc_control;
     gint hdlc_information;
     gint invoke_id_and_priority;
+    gint access_request_specification;
+    gint access_request;
+    gint access_response_specification;
+    gint access_response;
     gint cosem_attribute_or_method_descriptor;
+    gint selective_access_descriptor;
     gint composite_data;
     gint user_information; /* AARQ and AARE user-information field */
     gint conformance; /* InitiateRequest proposed-conformance and InitiateResponse negotiated-confirmance */
@@ -718,6 +782,20 @@ dlms_dissect_invoke_id_and_priority(proto_tree *tree, tvbuff_t *tvb, gint *offse
     proto_tree_add_item(subtree, &dlms_hfi.service_class, tvb, *offset, 1, ENC_NA);
     proto_tree_add_item(subtree, &dlms_hfi.priority, tvb, *offset, 1, ENC_NA);
     *offset += 1;
+}
+
+static void
+dlms_dissect_long_invoke_id_and_priority(proto_tree *tree, tvbuff_t *tvb, gint *offset)
+{
+    proto_tree *subtree;
+
+    subtree = proto_tree_add_subtree(tree, tvb, *offset, 4, dlms_ett.invoke_id_and_priority, 0, "Long Invoke Id And Priority");
+    proto_tree_add_item(subtree, &dlms_hfi.long_invoke_id, tvb, *offset, 4, ENC_BIG_ENDIAN);
+    proto_tree_add_item(subtree, &dlms_hfi.long_self_descriptive, tvb, *offset, 4, ENC_BIG_ENDIAN);
+    proto_tree_add_item(subtree, &dlms_hfi.long_processing_option, tvb, *offset, 4, ENC_BIG_ENDIAN);
+    proto_tree_add_item(subtree, &dlms_hfi.long_service_class, tvb, *offset, 4, ENC_BIG_ENDIAN);
+    proto_tree_add_item(subtree, &dlms_hfi.long_priority, tvb, *offset, 4, ENC_BIG_ENDIAN);
+    *offset += 4;
 }
 
 static void
@@ -810,13 +888,6 @@ static void
 dlms_dissect_cosem_method_descriptor(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gint *offset)
 {
     dlms_dissect_cosem_attribute_or_method_descriptor(tvb, pinfo, tree, offset, 0);
-}
-
-static void
-dlms_dissect_selective_access_descriptor(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gint *offset)
-{
-    proto_tree_add_item(tree, &dlms_hfi.selective_access_descriptor, tvb, *offset, 1, ENC_NA);
-    *offset += 1;
 }
 
 static void
@@ -1067,21 +1138,14 @@ dlms_dissect_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gint *off
         subtree = proto_item_add_subtree(item, dlms_ett.composite_data);
         for (i = 0; i < length; i++) {
             subitem = dlms_dissect_data(tvb, pinfo, subtree, offset);
-            if (subitem) {
-                proto_item_prepend_text(subitem, "[%u] ", i + 1);
-            } else {
-                return 0;
-            }
+            proto_item_prepend_text(subitem, "[%u] ", i + 1);
         }
     } else if (choice == 2) { /* structure */
         length = dlms_get_length(tvb, offset);
         proto_item_set_text(item, "Structure");
         subtree = proto_item_add_subtree(item, dlms_ett.composite_data);
         for (i = 0; i < length; i++) {
-            subitem = dlms_dissect_data(tvb, pinfo, subtree, offset);
-            if (!subitem) {
-                return 0;
-            }
+            dlms_dissect_data(tvb, pinfo, subtree, offset);
         }
     } else if (choice == 19) { /* compact-array */
         int description_offset = *offset;
@@ -1105,6 +1169,22 @@ dlms_dissect_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gint *off
     proto_item_set_end(item, tvb, *offset);
 
     return item;
+}
+
+static void
+dlms_dissect_list_of_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gint *offset, const char *name)
+{
+    proto_tree *item;
+    proto_tree *subtree;
+    int sequence_of, i;
+
+    subtree = proto_tree_add_subtree(tree, tvb, *offset, 0, dlms_ett.data, &item, name);
+    sequence_of = dlms_get_length(tvb, offset);
+    for (i = 0; i < sequence_of; i++) {
+        proto_item *subitem = dlms_dissect_data(tvb, pinfo, subtree, offset);
+        proto_item_prepend_text(subitem, "[%u] ", i + 1);
+    }
+    proto_item_set_end(item, tvb, *offset);
 }
 
 static void
@@ -1182,6 +1262,55 @@ dlms_dissect_datablock_sa(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, g
     *offset += 4;
 
     dlms_dissect_datablock_data(tvb, pinfo, tree, subtree, offset, block_number, last_block);
+}
+
+static void
+dlms_dissect_selective_access_descriptor(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gint *offset)
+{
+    proto_item *item;
+    proto_tree *subtree = proto_tree_add_subtree(tree, tvb, *offset, 0, dlms_ett.selective_access_descriptor, &item, "Selective Access Descriptor");
+    int selector = tvb_get_guint8(tvb, *offset);
+    proto_tree_add_item(subtree, &dlms_hfi.access_selector, tvb, *offset, 1, ENC_NA);
+    *offset += 1;
+    if (selector) {
+        dlms_dissect_data(tvb, pinfo, subtree, offset);
+    }
+    proto_item_set_end(item, tvb, *offset);
+}
+
+static void
+dlms_dissect_access_request_specification(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gint *offset)
+{
+    proto_item *item, *subitem;
+    proto_tree *subtree, *subsubtree;
+    int sequence_of, i;
+
+    subtree = proto_tree_add_subtree(tree, tvb, *offset, 0, dlms_ett.access_request_specification, &item, "Access Request Specification");
+    sequence_of = dlms_get_length(tvb, offset);
+    for (i = 0; i < sequence_of; i++) {
+        int choice = tvb_get_guint8(tvb, *offset);
+        subitem = proto_tree_add_item(subtree, &dlms_hfi.access_request, tvb, *offset, 1, ENC_NA);
+        proto_item_prepend_text(subitem, "[%u] ", i + 1);
+        subsubtree = proto_item_add_subtree(subitem, dlms_ett.access_request);
+        *offset += 1;
+        switch (choice) {
+        case DLMS_ACCESS_REQUEST_GET:
+        case DLMS_ACCESS_REQUEST_SET:
+            dlms_dissect_cosem_attribute_descriptor(tvb, pinfo, subsubtree, offset);
+            break;
+        case DLMS_ACCESS_REQUEST_ACTION:
+            dlms_dissect_cosem_method_descriptor(tvb, pinfo, subsubtree, offset);
+            break;
+        case DLMS_ACCESS_REQUEST_GET_WITH_SELECTION:
+        case DLMS_ACCESS_REQUEST_SET_WITH_SELECTION:
+            dlms_dissect_cosem_attribute_descriptor(tvb, pinfo, subsubtree, offset);
+            dlms_dissect_selective_access_descriptor(tvb, pinfo, subsubtree, offset);
+            break;
+        default:
+            DISSECTOR_ASSERT_HINT(choice, "Invalid Access-Request-Specification CHOICE");
+        }
+    }
+    proto_item_set_end(item, tvb, *offset);
 }
 
 static void
@@ -1423,6 +1552,60 @@ dlms_dissect_exception_response(tvbuff_t *tvb, packet_info *pinfo, proto_tree *t
     expert_add_info(pinfo, item, &dlms_ei.no_success);
 }
 
+static void
+dlms_dissect_access_request(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gint offset)
+{
+    gint date_time_offset;
+    int date_time_length;
+    proto_item *item;
+
+    col_set_str(pinfo->cinfo, COL_INFO, "Access-Request");
+
+    dlms_dissect_long_invoke_id_and_priority(tree, tvb, &offset);
+
+    date_time_offset = offset;
+    date_time_length = dlms_get_length(tvb, &offset);
+    item = proto_tree_add_item(tree, &dlms_hfi.date_time, tvb, date_time_offset, offset - date_time_offset + date_time_length, ENC_NA);
+    dlms_append_date_time_maybe(tvb, item, offset, date_time_length);
+
+    dlms_dissect_access_request_specification(tvb, pinfo, tree, &offset);
+
+    dlms_dissect_list_of_data(tvb, pinfo, tree, &offset, "Access Request List Of Data");
+}
+
+static void
+dlms_dissect_access_response(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gint offset)
+{
+    gint date_time_offset;
+    int date_time_length;
+    proto_item *item;
+    proto_tree *subtree, *subsubtree;
+    int sequence_of, i;
+
+    col_set_str(pinfo->cinfo, COL_INFO, "Access-Response");
+
+    dlms_dissect_long_invoke_id_and_priority(tree, tvb, &offset);
+
+    date_time_offset = offset;
+    date_time_length = dlms_get_length(tvb, &offset);
+    item = proto_tree_add_item(tree, &dlms_hfi.date_time, tvb, date_time_offset, offset - date_time_offset + date_time_length, ENC_NA);
+    dlms_append_date_time_maybe(tvb, item, offset, date_time_length);
+
+    dlms_dissect_access_request_specification(tvb, pinfo, tree, &offset);
+
+    dlms_dissect_list_of_data(tvb, pinfo, tree, &offset, "Access Response List Of Data");
+
+    subtree = proto_tree_add_subtree(tree, tvb, offset, 0, dlms_ett.access_response_specification, 0, "Access Response Specification");
+    sequence_of = dlms_get_length(tvb, &offset);
+    for (i = 0; i < sequence_of; i++) {
+        item = proto_tree_add_item(subtree, &dlms_hfi.access_response, tvb, offset, 1, ENC_NA);
+        proto_item_prepend_text(item, "[%u] ", i + 1);
+        subsubtree = proto_item_add_subtree(item, dlms_ett.access_request);
+        offset += 1;
+        dlms_dissect_data_access_result(tvb, pinfo, subsubtree, &offset);
+    }
+}
+
 /* Dissect a DLMS Application Packet Data Unit (APDU) */
 static void
 dlms_dissect_apdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gint offset)
@@ -1456,6 +1639,10 @@ dlms_dissect_apdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gint offs
         dlms_dissect_action_response(tvb, pinfo, tree, offset);
     } else if (choice == DLMS_EXCEPTION_RESPONSE) {
         dlms_dissect_exception_response(tvb, pinfo, tree, offset);
+    } else if (choice == DLMS_ACCESS_REQUEST) {
+        dlms_dissect_access_request(tvb, pinfo, tree, offset);
+    } else if (choice == DLMS_ACCESS_RESPONSE) {
+        dlms_dissect_access_response(tvb, pinfo, tree, offset);
     } else {
         col_set_str(pinfo->cinfo, COL_INFO, "Unknown APDU");
     }

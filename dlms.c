@@ -501,6 +501,7 @@ static struct {
     header_field_info action_result;
     header_field_info block_number;
     header_field_info last_block;
+    header_field_info type_description;
     header_field_info data;
     header_field_info length;
     header_field_info state_error;
@@ -583,6 +584,7 @@ static struct {
     { "Action Result", "dlms.action_result", FT_UINT8, BASE_DEC, dlms_action_result_names, 0, 0, HFILL },
     { "Block Number", "dlms.block_number", FT_UINT32, BASE_DEC, 0, 0, 0, HFILL },
     { "Last Block", "dlms.last_block", FT_BOOLEAN, BASE_DEC, 0, 0, 0, HFILL },
+    { "Type Description", "dlms.type_description", FT_NONE, BASE_NONE, 0, 0, 0, HFILL },
     { "Data", "dlms.data", FT_NONE, BASE_NONE, 0, 0, 0, HFILL },
     { "Length", "dlms.length", FT_NONE, BASE_NONE, 0, 0, 0, HFILL },
     { "State Error", "dlms.state_error", FT_UINT8, BASE_DEC, dlms_state_error_names, 0, 0, HFILL },
@@ -854,6 +856,40 @@ dlms_get_length(tvbuff_t *tvb, gint *offset)
     return length;
 }
 
+static unsigned
+dlms_dissect_length(tvbuff_t *tvb, proto_tree *tree, gint *offset)
+{
+    gint start;
+    unsigned length;
+    proto_item *item;
+
+    start = *offset;
+    length = dlms_get_length(tvb, offset);
+    item = proto_tree_add_item(tree, &dlms_hfi.length, tvb, start, *offset - start, ENC_NA);
+    proto_item_append_text(item, ": %u", length);
+
+    return length;
+}
+
+/* Calculate the number of bytes used by a TypeDescription of a compact array */
+static int
+dlms_get_type_description_length(tvbuff_t *tvb, gint offset)
+{
+    int choice = tvb_get_guint8(tvb, offset);
+    if (choice == 1) { // array
+        return 1 + 2 + dlms_get_type_description_length(tvb, offset + 3);
+    } else if (choice == 2) { // structure
+        gint end_offset = offset + 1;
+        int sequence_of = dlms_get_length(tvb, &end_offset);
+        while (sequence_of--) {
+            end_offset += dlms_get_type_description_length(tvb, end_offset);
+        }
+        return end_offset - offset;
+    } else {
+        return 1;
+    }
+}
+
 /* Attempt to parse a date-time from an octet-string */
 static void
 dlms_append_date_time_maybe(tvbuff_t *tvb, proto_item *item, gint offset, unsigned length)
@@ -888,112 +924,81 @@ dlms_append_date_time_maybe(tvbuff_t *tvb, proto_item *item, gint offset, unsign
     proto_item_append_text(item, hundredths < 100 ? ".%02u)" : ".%02X)", hundredths);
 }
 
-static proto_item *
-dlms_dissect_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gint *offset)
+/* Set the value of an item with a planar data type (not array nor structure) */
+static void
+dlms_set_data_value(tvbuff_t *tvb, proto_item *item, gint choice, gint *offset)
 {
-    proto_item *item, *subitem;
-    proto_tree *subtree;
-    unsigned choice, length, i;
-
-    item = proto_tree_add_item(tree, &dlms_hfi.data, tvb, *offset, 1, ENC_NA);
-    choice = tvb_get_guint8(tvb, *offset);
-    *offset += 1;
     if (choice == 0) {
         proto_item_set_text(item, "Null");
-    } else if (choice == 1) {
-        length = dlms_get_length(tvb, offset);
-        proto_item_set_text(item, "Array (length %u)", length);
-        subtree = proto_item_add_subtree(item, dlms_ett.composite_data);
-        for (i = 0; i < length; i++) {
-            subitem = dlms_dissect_data(tvb, pinfo, subtree, offset);
-            if (subitem) {
-                proto_item_prepend_text(subitem, "[%u] ", i);
-            } else {
-                return 0;
-            }
-        }
-    } else if (choice == 2) {
-        length = dlms_get_length(tvb, offset);
-        proto_item_set_text(item, "Structure");
-        subtree = proto_item_add_subtree(item, dlms_ett.composite_data);
-        for (i = 0; i < length; i++) {
-            subitem = dlms_dissect_data(tvb, pinfo, subtree, offset);
-            if (!subitem) {
-                return 0;
-            }
-        }
     } else if (choice == 3) {
-        proto_item_set_text(item, "Boolean: %s", tvb_get_guint8(tvb, *offset) ? "true" : "false");
+        gboolean value = tvb_get_guint8(tvb, *offset);
+        proto_item_set_text(item, "Boolean: %s", value ? "true" : "false");
         *offset += 1;
     } else if (choice == 4) {
-        length = dlms_get_length(tvb, offset); /* length in bits */
-        proto_item_set_text(item, "Bit-string (length %u):", length);
-        length = (length + 7) / 8; /* length in bytes */
-        for (i = 0; i < length; i++) {
-            proto_item_append_text(item, " %02x", tvb_get_guint8(tvb, *offset + i));
-            if (i > 20) {
-                proto_item_append_text(item, " ...");
-                break;
-            }
-        }
-        *offset += length;
+        guint bits = dlms_get_length(tvb, offset);
+        guint bytes = (bits + 7) / 8;
+        proto_item_set_text(item, "Bit-string (bits: %u, bytes: %u):", bits, bytes);
+        *offset += bytes;
     } else if (choice == 5) {
-        proto_item_set_text(item, "Double Long: %d", (int)tvb_get_ntohl(tvb, *offset));
+        gint32 value = tvb_get_ntohl(tvb, *offset);
+        proto_item_set_text(item, "Double Long: %d", value);
         *offset += 4;
     } else if (choice == 6) {
-        proto_item_set_text(item, "Double Long Unsigned: %u", tvb_get_ntohl(tvb, *offset));
+        guint32 value = tvb_get_ntohl(tvb, *offset);
+        proto_item_set_text(item, "Double Long Unsigned: %u", value);
         *offset += 4;
     } else if (choice == 9) {
-        length = dlms_get_length(tvb, offset);
-        proto_item_set_text(item, "Octet String (length %u):", length);
-        for (i = 0; i < length; i++) {
-            proto_item_append_text(item, " %02x", tvb_get_guint8(tvb, *offset + i));
-            if (i > 20) {
-                proto_item_append_text(item, " ...");
-                break;
-            }
-        }
+        guint length = dlms_get_length(tvb, offset);
+        proto_item_set_text(item, "Octet String (length %u)", length);
         dlms_append_date_time_maybe(tvb, item, *offset, length);
         *offset += length;
     } else if (choice == 10) {
-        length = dlms_get_length(tvb, offset);
+        guint length = dlms_get_length(tvb, offset);
         proto_item_set_text(item, "Visible String (length %u)", length);
         *offset += length;
     } else if (choice == 12) {
-        length = dlms_get_length(tvb, offset);
+        guint length = dlms_get_length(tvb, offset);
         proto_item_set_text(item, "UTF8 String (length %u)", length);
         *offset += length;
     } else if (choice == 13) {
-        proto_item_set_text(item, "BCD: 0x%02x", tvb_get_guint8(tvb, *offset));
+        guint value = tvb_get_guint8(tvb, *offset);
+        proto_item_set_text(item, "BCD: 0x%02x", value);
         *offset += 1;
     } else if (choice == 15) {
-        proto_item_set_text(item, "Integer: %d", (signed char)tvb_get_guint8(tvb, *offset));
+	gint8 value = tvb_get_guint8(tvb, *offset);
+        proto_item_set_text(item, "Integer: %d", value);
         *offset += 1;
     } else if (choice == 16) {
-        proto_item_set_text(item, "Long: %d", (short)tvb_get_ntohs(tvb, *offset));
+        gint16 value = tvb_get_ntohs(tvb, *offset);
+        proto_item_set_text(item, "Long: %d", value);
         *offset += 2;
     } else if (choice == 17) {
-        proto_item_set_text(item, "Unsigned: %u", tvb_get_guint8(tvb, *offset));
+        guint8 value = tvb_get_guint8(tvb, *offset);
+        proto_item_set_text(item, "Unsigned: %u", value);
         *offset += 1;
     } else if (choice == 18) {
-        proto_item_set_text(item, "Long Unsigned: %u", tvb_get_ntohs(tvb, *offset));
+        guint16 value = tvb_get_ntohs(tvb, *offset);
+        proto_item_set_text(item, "Long Unsigned: %u", value);
         *offset += 2;
-    } else if (choice == 19) {
-        DISSECTOR_ASSERT_HINT(choice, "Compact Array is not implemented");
     } else if (choice == 20) {
-        proto_item_set_text(item, "Long64: %ld", tvb_get_ntoh64(tvb, *offset));
+        gint64 value = tvb_get_ntoh64(tvb, *offset);
+        proto_item_set_text(item, "Long64: %ld", value);
         *offset += 8;
     } else if (choice == 21) {
-        proto_item_set_text(item, "Long64 Unsigned: %lu", tvb_get_ntoh64(tvb, *offset));
+        guint64 value = tvb_get_ntoh64(tvb, *offset);
+        proto_item_set_text(item, "Long64 Unsigned: %lu", value);
         *offset += 8;
     } else if (choice == 22) {
-        proto_item_set_text(item, "Enum: %u", tvb_get_guint8(tvb, *offset));
+        guint8 value = tvb_get_guint8(tvb, *offset);
+        proto_item_set_text(item, "Enum: %u", value);
         *offset += 1;
     } else if (choice == 23) {
-        proto_item_set_text(item, "Float32: %f", tvb_get_ntohieee_float(tvb, *offset));
+        gfloat value = tvb_get_ntohieee_float(tvb, *offset);
+        proto_item_set_text(item, "Float32: %f", value);
         *offset += 4;
     } else if (choice == 24) {
-        proto_item_set_text(item, "Float64: %f", tvb_get_ntohieee_double(tvb, *offset));
+        gdouble value = tvb_get_ntohieee_double(tvb, *offset);
+        proto_item_set_text(item, "Float64: %f", value);
         *offset += 8;
     } else if (choice == 25) {
         proto_item_set_text(item, "Date Time");
@@ -1008,6 +1013,94 @@ dlms_dissect_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gint *off
         proto_item_set_text(item, "Don't Care");
     } else {
         DISSECTOR_ASSERT_HINT(choice, "Invalid data type");
+    }
+}
+
+static proto_item *
+dlms_dissect_compact_array_content(tvbuff_t *tvb, proto_tree *tree, gint description_offset, gint *content_offset)
+{
+    proto_item *item, *subitem;
+    proto_tree *subtree;
+    unsigned choice;
+
+    item = proto_tree_add_item(tree, &dlms_hfi.data, tvb, *content_offset, 0, ENC_NA);
+    choice = tvb_get_guint8(tvb, description_offset);
+    description_offset += 1;
+    if (choice == 1) { /* array */
+        guint16 i, elements = tvb_get_ntohs(tvb, description_offset);
+        description_offset += 2;
+        proto_item_set_text(item, "Array (%u elements)", elements);
+        subtree = proto_item_add_subtree(item, dlms_ett.composite_data);
+        for (i = 0; i < elements; i++) {
+            subitem = dlms_dissect_compact_array_content(tvb, subtree, description_offset, content_offset);
+            proto_item_prepend_text(subitem, "[%u] ", i + 1);
+        }
+    } else if (choice == 2) { /* structure */
+        guint32 elements = dlms_get_length(tvb, &description_offset);
+        proto_item_set_text(item, "Structure");
+        subtree = proto_item_add_subtree(item, dlms_ett.composite_data);
+        while (elements--) {
+            dlms_dissect_compact_array_content(tvb, subtree, description_offset, content_offset);
+            description_offset += dlms_get_type_description_length(tvb, description_offset);
+        }
+    } else { /* planar type */
+        dlms_set_data_value(tvb, item, choice, content_offset);
+    }
+    proto_item_set_end(item, tvb, *content_offset);
+
+    return item;
+}
+
+static proto_item *
+dlms_dissect_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gint *offset)
+{
+    proto_item *item, *subitem;
+    proto_tree *subtree;
+    unsigned choice, length, i;
+
+    item = proto_tree_add_item(tree, &dlms_hfi.data, tvb, *offset, 1, ENC_NA);
+    choice = tvb_get_guint8(tvb, *offset);
+    *offset += 1;
+    if (choice == 1) { /* array */
+        length = dlms_get_length(tvb, offset);
+        proto_item_set_text(item, "Array (%u elements)", length);
+        subtree = proto_item_add_subtree(item, dlms_ett.composite_data);
+        for (i = 0; i < length; i++) {
+            subitem = dlms_dissect_data(tvb, pinfo, subtree, offset);
+            if (subitem) {
+                proto_item_prepend_text(subitem, "[%u] ", i + 1);
+            } else {
+                return 0;
+            }
+        }
+    } else if (choice == 2) { /* structure */
+        length = dlms_get_length(tvb, offset);
+        proto_item_set_text(item, "Structure");
+        subtree = proto_item_add_subtree(item, dlms_ett.composite_data);
+        for (i = 0; i < length; i++) {
+            subitem = dlms_dissect_data(tvb, pinfo, subtree, offset);
+            if (!subitem) {
+                return 0;
+            }
+        }
+    } else if (choice == 19) { /* compact-array */
+        int description_offset = *offset;
+        int description_length = dlms_get_type_description_length(tvb, *offset);
+        int content_end;
+        unsigned elements;
+        subtree = proto_item_add_subtree(item, dlms_ett.composite_data);
+        proto_tree_add_item(subtree, &dlms_hfi.type_description, tvb, description_offset, description_length, ENC_NA);
+        *offset += description_length;
+        length = dlms_dissect_length(tvb, subtree, offset);
+        elements = 0;
+        content_end = *offset + length;
+        while (*offset < content_end) {
+            subitem = dlms_dissect_compact_array_content(tvb, subtree, description_offset, offset);
+            proto_item_prepend_text(subitem, "[%u] ", ++elements);
+        }
+        proto_item_set_text(item, "Compact Array (%u elements)", elements);
+    } else { /* planar type */
+        dlms_set_data_value(tvb, item, choice, offset);
     }
     proto_item_set_end(item, tvb, *offset);
 

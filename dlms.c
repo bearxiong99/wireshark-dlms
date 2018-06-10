@@ -29,6 +29,7 @@
 #include "obis.h"
 
 /* Choice values for the currently supported ACSE and xDLMS APDUs */
+#define DLMS_DATA_NOTIFICATION 15
 #define DLMS_AARQ 96
 #define DLMS_AARE 97
 #define DLMS_RLRQ 98
@@ -44,6 +45,7 @@
 #define DLMS_ACCESS_REQUEST 217
 #define DLMS_ACCESS_RESPONSE 218
 static const value_string dlms_apdu_names[] = {
+    { DLMS_DATA_NOTIFICATION, "data-notification" },
     { DLMS_AARQ, "aarq" },
     { DLMS_AARE, "aare" },
     { DLMS_RLRQ, "rlrq" },
@@ -647,10 +649,10 @@ static struct {
     { "Priority", "dlms.priority", FT_UINT8, BASE_DEC, dlms_priority_names, 0x80, 0, HFILL },
     /* Long-Invoke-Id-And-Priority */
     { "Long Invoke Id", "dlms.long_invoke_id", FT_UINT32, BASE_DEC, 0, 0xffffff, 0, HFILL },
-    { "Self Descriptive", "dlms.self_descriptive", FT_UINT32, BASE_DEC, dlms_self_descriptive_names, 0x1000000, 0, HFILL },
-    { "Processing Option", "dlms.processing_option", FT_UINT32, BASE_DEC, dlms_processing_option_names, 0x2000000, 0, HFILL },
-    { "Service Class", "dlms.service_class", FT_UINT32, BASE_DEC, dlms_service_class_names, 0x4000000, 0, HFILL },
-    { "Priority", "dlms.priority", FT_UINT32, BASE_DEC, dlms_priority_names, 0x8000000, 0, HFILL },
+    { "Self Descriptive", "dlms.self_descriptive", FT_UINT32, BASE_DEC, dlms_self_descriptive_names, 0x10000000, 0, HFILL },
+    { "Processing Option", "dlms.processing_option", FT_UINT32, BASE_DEC, dlms_processing_option_names, 0x20000000, 0, HFILL },
+    { "Service Class", "dlms.service_class", FT_UINT32, BASE_DEC, dlms_service_class_names, 0x40000000, 0, HFILL },
+    { "Priority", "dlms.priority", FT_UINT32, BASE_DEC, dlms_priority_names, 0x80000000, 0, HFILL },
     /* proposed-conformance and negotiated-conformance bits */
     { "general-protection", "dlms.conformance.general_protection", FT_UINT24, BASE_DEC, 0, 0x400000, 0, HFILL },
     { "general-block-transfer", "dlms.conformance.general_block_transfer", FT_UINT24, BASE_DEC, 0, 0x200000, 0, HFILL },
@@ -1326,6 +1328,26 @@ dlms_dissect_conformance(tvbuff_t *tvb, proto_tree *tree, gint offset)
 }
 
 static void
+dlms_dissect_data_notification(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gint offset)
+{
+    gint date_time_offset;
+    gint date_time_length;
+    proto_item *item;
+
+    col_set_str(pinfo->cinfo, COL_INFO, "Data-Notification");
+
+    dlms_dissect_long_invoke_id_and_priority(tree, tvb, &offset);
+
+    date_time_offset = offset;
+    date_time_length = dlms_get_length(tvb, &offset);
+    item = proto_tree_add_item(tree, &dlms_hfi.date_time, tvb, date_time_offset, offset - date_time_offset + date_time_length, ENC_NA);
+    dlms_append_date_time_maybe(tvb, item, offset, date_time_length);
+
+    /* notification-body */
+    dlms_dissect_data(tvb, pinfo, tree, &offset);
+}
+
+static void
 dlms_dissect_aarq(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gint offset)
 {
     proto_tree *subtree;
@@ -1615,7 +1637,9 @@ dlms_dissect_apdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gint offs
     proto_tree_add_item(tree, &dlms_hfi.apdu, tvb, offset, 1, ENC_NA);
     choice = tvb_get_guint8(tvb, offset);
     offset += 1;
-    if (choice == DLMS_AARQ) {
+    if (choice == DLMS_DATA_NOTIFICATION) {
+        dlms_dissect_data_notification(tvb, pinfo, tree, offset);
+    } else if (choice == DLMS_AARQ) {
         dlms_dissect_aarq(tvb, pinfo, tree, offset);
     } else if (choice == DLMS_AARE) {
         dlms_dissect_aare(tvb, pinfo, tree, offset);

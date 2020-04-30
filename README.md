@@ -16,9 +16,9 @@ Common uses:
 
 1. Install the Wireshark development libraries: `sudo apt-get install wireshark-dev`
 2. Compile the dlms.so plugin: `sh build.sh`
-3. Copy the dlms.so plugin to the [Wireshark plugins directory](https://www.wireshark.org/docs/wsug_html_chunked/ChPluginFolders.html):
+3. Copy the dlms.so plugin to the [Wireshark plugins directory](https://www.wireshark.org/docs/wsug_html_chunked/ChPluginFolders.html) (note, [epan is directory for all dissection plugins](https://code.wireshark.org/review/gitweb?p=wireshark.git;a=blob;f=doc/README.plugins;hb=HEAD#l7)):
 ```
-mkdir -p ~/.local/lib/wireshark/plugins && cp dlms.so ~/.local/lib/wireshark/plugins 
+mkdir -p ~/.local/lib/wireshark/plugins/2.6/epan && cp dlms.so ~/.local/lib/wireshark/plugins/2.6/epan
 # sudo cp dlms.so /usr/lib/x86_64-linux-gnu/wireshark/plugins/2.4.5/dlms.so
 ```
 
